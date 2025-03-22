@@ -1,0 +1,296 @@
+function getOrCreateSpreadsheet() {
+    const spreadsheetName = "Datasheet";
+    let spreadsheet;
+    const files = DriveApp.getFilesByName(spreadsheetName);
+    if (files.hasNext()) {
+
+        const fileId = files.next().getId();
+        spreadsheet = SpreadsheetApp.openById(fileId);
+        console.log(`Spreedshet "${spreadsheetName}" was created successfully.`);
+    } else {
+        spreadsheet = SpreadsheetApp.create(spreadsheetName);
+        console.log(`Spreedshet "${spreadsheetName}" was find and open`);
+    }
+
+    return spreadsheet;
+}
+function prepareAccountDataSheet(spreadsheet) {
+    let sheet = spreadsheet.getSheetByName("Account_Data");
+    if (!sheet) {
+        sheet = spreadsheet.insertSheet("Account_Data");
+    } else {
+        sheet.clear();
+    }
+
+    const headers = [
+        "Account_Name",
+        "Account_ID",
+        "Campaign_Name",
+        "Campaign_Status",
+        "Campaign_Type",
+        "Clicks",
+        "Impressions",
+        "Spend",
+        "Ads_Disapproved",
+        "Disapproval_Reason",
+        "Policy_Limited",
+        "Policy_Reason",
+        "last_insert_datetime"
+    ];
+
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+    return { sheet, headers };
+}
+
+function prepareSheet1(spreadsheet) {
+    let sheet1 = spreadsheet.getSheetByName("Sheet1");
+    if (!sheet1) {
+        sheet1 = spreadsheet.insertSheet("Sheet1");
+    } else {
+
+        sheet1.clear();
+    }
+
+    return sheet1;
+}
+
+
+function pauseCampaignsWithDisapprovedAds() {
+    var campaignsIterator = AdsApp.campaigns()
+        .withCondition("Status = ENABLED")
+        .get();
+
+    while (campaignsIterator.hasNext()) {
+        var campaign = campaignsIterator.next();
+        var campaignId = campaign.getId();
+        var campaignName = campaign.getName();
+
+        var adIterator = campaign.ads().get();
+        let adsDisapproved = false;
+        let disapprovalReasons = [];
+
+        while (adIterator.hasNext()) {
+            const ad = adIterator.next();
+            const approvalStatus = ad.getPolicyApprovalStatus();
+
+            if (approvalStatus === 'DISAPPROVED') {
+                adsDisapproved = true;
+                const policyTopics = ad.getPolicyTopics();
+
+                if (policyTopics.length > 0) {
+                    policyTopics.forEach(function (topic) {
+                        disapprovalReasons.push(topic.getName());
+                    });
+                }
+            }
+        }
+
+        if (adsDisapproved) {
+            campaign.pause();
+        }
+    }
+}
+
+function main() {
+    const accountId = AdsApp.currentAccount().getCustomerId();
+    const ACCOUNT_NAME = AdsApp.currentAccount().getName();
+    const targetSpreadsheetId = "1XGQVoTFY5JD9DqumiZ5nGy6cYE1XUi7mox5XodF68p0";
+    const targetSheetName = "Accounts_Data";
+
+    const spreadsheet = getOrCreateSpreadsheet();
+    const { sheet, headers } = prepareAccountDataSheet(spreadsheet);
+    const sheet1 = prepareSheet1(spreadsheet);
+
+    const campaignIterator = AdsApp.campaigns().withCondition("Status IN ['ENABLED', 'PAUSED']").get();
+    const rows = [];
+    const bucharestTimezone = "Europe/Bucharest";
+
+    let mostRecentCampaign = null;
+    let mostRecentStartDate = null;
+    let totalCampaigns = 0;
+
+    const accountStats = AdsApp.currentAccount().getStatsFor("ALL_TIME");
+    const totalSpend = accountStats.getCost();
+
+    while (campaignIterator.hasNext()) {
+        const campaign = campaignIterator.next();
+        totalCampaigns++;
+
+        const startDateObject = campaign.getStartDate();
+        if (!startDateObject) continue;
+
+
+        const year = startDateObject.year;
+        const month = startDateObject.month;
+        const day = startDateObject.day;
+
+
+        const startDateString = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+
+
+
+        const startDate = new Date(startDateString);
+        if (isNaN(startDate.getTime())) continue;
+
+
+        if (!mostRecentStartDate || startDate.getTime() > mostRecentStartDate.getTime()) {
+            mostRecentCampaign = campaign;
+            mostRecentStartDate = startDate;
+        }
+    }
+
+
+    if (mostRecentCampaign) {
+        const campaign = mostRecentCampaign;
+        let campaignStatus = "Unknown";
+
+        if (campaign.isEnabled()) {
+            campaignStatus = "Enabled";
+        } else if (campaign.isPaused()) {
+            campaignStatus = "Paused";
+        } else if (campaign.isRemoved()) {
+            campaignStatus = "Removed";
+        }
+
+        const adIterator = campaign.ads().get();
+        let adsDisapproved = false;
+        let disapprovalReasons = [];
+        let policyLimited = "No";
+        let policyReasons = [];
+
+        while (adIterator.hasNext()) {
+            const ad = adIterator.next();
+            const approvalStatus = ad.getPolicyApprovalStatus();
+
+            if (approvalStatus === 'DISAPPROVED') {
+                adsDisapproved = true;
+                const policyTopics = ad.getPolicyTopics();
+                if (policyTopics.length > 0) {
+                    policyTopics.forEach(function (topic) {
+                        disapprovalReasons.push(topic.getName());
+                    });
+                }
+            }
+
+            const policyTopics = ad.getPolicyTopics();
+            if (policyTopics.length > 0) {
+                policyLimited = "Yes";
+                policyTopics.forEach(function (topic) {
+                    policyReasons.push(topic.getId());
+                });
+            }
+        }
+
+        const stats = campaign.getStatsFor("ALL_TIME");
+        const currentDate = new Date();
+        const lastInsertDateTime = "->" + Utilities.formatDate(currentDate, bucharestTimezone, "HH:mm:ss dd-MM-yyyy");
+
+        rows.push([
+            ACCOUNT_NAME,
+            accountId,
+            campaign.getName(),
+            campaignStatus,
+            campaign.getAdvertisingChannelType(),
+            stats.getClicks(),
+            stats.getImpressions(),
+            totalSpend,
+            adsDisapproved ? "Yes" : "No",
+            disapprovalReasons.join(", ") || "-",
+            policyLimited,
+            policyReasons.join(", ") || "-",
+            lastInsertDateTime
+        ]);
+    }
+
+    if (rows.length > 0) {
+        sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+        const dataWithHeaders = rows.map(row => {
+            const rowObject = {};
+            headers.forEach((header, index) => {
+                rowObject[header] = row[index];
+            });
+            return rowObject;
+        });
+
+        const jsonData = JSON.stringify(dataWithHeaders);
+        const base64Data = Utilities.base64Encode(jsonData);
+        sheet1.getRange("A1").setValue(base64Data);
+
+        sendDataToTargetSpreadsheet(targetSpreadsheetId, targetSheetName);
+    }
+
+    pauseCampaignsWithDisapprovedAds();
+}
+
+function sendDataToTargetSpreadsheet(targetSpreadsheetId, targetSheetName) {
+
+    const sourceSpreadsheet = getOrCreateSpreadsheet();
+    const sourceSheet = sourceSpreadsheet.getSheetByName("Account_Data");
+
+    if (!sourceSheet) {
+
+        return;
+    }
+
+
+    let targetSpreadsheet;
+    try {
+        targetSpreadsheet = SpreadsheetApp.openById(targetSpreadsheetId);
+    } catch (e) {
+        return;
+    }
+
+
+    let targetSheet = targetSpreadsheet.getSheetByName(targetSheetName);
+    if (!targetSheet) {
+
+        targetSheet = targetSpreadsheet.insertSheet(targetSheetName);
+    }
+
+
+    const sourceData = sourceSheet.getDataRange().getValues();
+    const headers = sourceData[0];
+    const rows = sourceData.slice(1);
+
+
+    const targetData = targetSheet.getDataRange().getValues();
+    const targetHeaders = targetData[0];
+
+
+    if (targetData.length === 0) {
+        targetSheet.appendRow(headers);
+    }
+
+    if (JSON.stringify(headers) !== JSON.stringify(targetHeaders)) {
+        return;
+    }
+
+
+    const accountNameIndex = headers.indexOf("Account_Name");
+    if (accountNameIndex === -1) {
+        return;
+    }
+
+
+    rows.forEach((row) => {
+        const accountName = row[accountNameIndex];
+
+
+        let targetRowIndex = -1;
+        for (let i = 1; i < targetData.length; i++) {
+            if (targetData[i][accountNameIndex] === accountName) {
+                targetRowIndex = i + 1;
+                break;
+            }
+        }
+
+        if (targetRowIndex !== -1) {
+
+            targetSheet.getRange(targetRowIndex, 1, 1, row.length).setValues([row]);
+        } else {
+
+            targetSheet.appendRow(row);
+        }
+    });
+}
