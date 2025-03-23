@@ -10,7 +10,10 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "axios": "^1.8.4",
+    "cheerio": "^1.0.0",
     "dotenv": "^16.4.7",
+    "openai": "^4.89.0",
     "redis": "^4.7.0",
     "telegraf": "^3.40.0",
     "telegraf-session-redis": "^5.1.0"

@@ -5,6 +5,13 @@ const RedisSession = require('telegraf-session-redis');
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const fs = require('fs');
 const scriptTemplate = require('./scripttemplate');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const OpenAI = require('openai');
+
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+});
 
 bot.launch()
     .then(() => console.log('🚀 Botul rulează perfect acum!'))
@@ -34,12 +41,24 @@ bot.start((ctx) => {
 
     bot.telegram.sendMessage(ctx.chat.id, welcomeMessage, {
         reply_markup: {
-            keyboard: [['📝 Create Camp', '📊 DataScript'], ['🪄 Generate assets']],
+            keyboard: [['📝 Create Camp', '📊 DataScript'],['📂 Extract Data'] ,['🪄 Generate assets'],['🪄 Deep Assets']],
             resize_keyboard: true,
         },
     });
 });
-bot.hears('🪄 Generate assets', (ctx) => ctx.reply('Generate assets selected 🪄'));
+bot.hears('🪄 Generate assets', async (ctx) => {
+    ctx.session.state = 'awaiting_domain_for_assets';
+    await ctx.reply('Please enter your web site:');
+});
+
+bot.hears('🪄 Deep Assets', async (ctx) => {
+    ctx.session.state = 'awaiting_domain_for_deepseek_assets';
+    await ctx.reply('Please enter your web site:');
+});
+bot.hears('📂 Extract Data', async (ctx) => {
+    ctx.session.state = 'awaiting_domain_for_extract_data';
+    await ctx.reply('🌐 Enter web site: ');
+});
 bot.hears('📊 DataScript', async (ctx) => {
     ctx.session.state = null; // Reset state pentru a nu interfera cu alt handler
     try {
@@ -91,9 +110,184 @@ bot.hears('📝 Create Camp', (ctx) => {
 bot.on('text', async (ctx) => {
     const state = ctx.session.state;
     const text = ctx.message.text;
-    if (['📊 DataScript', '📝 Create Camp', '🪄 Generate assets'].includes(text)) {
+    if (['📊 DataScript', '📝 Create Camp', '🪄 Generate assets', '🪄 Deep Assets','📂 Extract Data'].includes(text)) {
         return;
     }
+
+    if (state === 'awaiting_domain_for_assets') {
+        // Validare domeniu introdus
+        if (!/^([\w-]+\.)+[\w-]{2,}$/.test(text)) {
+            return ctx.reply('⚠️ Domeniu invalid. Încearcă din nou (ex: domeniu.com).');
+        }
+
+        await ctx.reply(`🔄 Se extrage conținutul de pe ${text}...`);
+
+        try {
+            // Extrage conținutul HTML al website-ului
+            const response = await axios.get(`https://${text}`);
+
+            const $ = cheerio.load(response.data);
+            let content = '';
+            $('h1, h2, h3, p').each((_, el) => {
+                content += $(el).text().trim() + '\n';
+            });
+
+            if (!content) {
+                ctx.session.state = null;
+                return ctx.reply('⚠️ Nu s-a putut extrage conținut relevant din acest site.');
+            }
+
+            await ctx.reply('✨ Se generează acum descrierea adaptată prin ChatGPT...');
+
+            // apel OpenAI
+            try {
+                const completion = await openai.chat.completions.create({
+                    model: "gpt-4o-mini",
+                    store: true,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You are an assistant who writes engaging and concise website descriptions based on provided text.'
+                        },
+                        {
+                            role: 'user',
+                            content: `Generează o descriere atractivă și adaptată pentru website-ul ${text} folosind textele următoare:\n\n${content}`
+                        }
+                    ]
+                });
+
+                const generatedDescription = completion.choices[0].message.content;
+
+                await ctx.reply(`🚀 Descriere generată pentru ${text}:\n\n${generatedDescription}`);
+
+            } catch (error) {
+                console.error('Eroare la OpenAI API:', error);
+                await ctx.reply(`🚀 Text Extras din domen \n  ${text}:`)
+                await ctx.reply('❌ A apărut o eroare la generarea descrierii. Încearcă din nou.');
+            }
+
+        } catch (error) {
+            console.error('Eroare la extragerea conținutului site-ului:', error);
+            await ctx.reply('❌ A apărut o eroare la accesarea site-ului. Asigură-te că domeniul este corect și accesibil.');
+        }
+
+        ctx.session.state = null; // resetare state
+        return;
+    }
+    if (state === 'awaiting_domain_for_deepseek_assets') {
+        // Validare domeniu introdus
+        if (!/^([\w-]+\.)+[\w-]{2,}$/.test(text)) {
+            return ctx.reply('⚠️ Domeniu invalid. Încearcă din nou (ex: domeniu.com).');
+        }
+
+        await ctx.reply(`🔄 Se extrage conținutul de pe ${text}...`);
+
+        try {
+            // Extrage conținutul HTML al website-ului
+            const response = await axios.get(`https://${text}`);
+            const $ = cheerio.load(response.data);
+            let content = '';
+            $('h1, h2, h3, p').each((_, el) => {
+                content += $(el).text().trim() + '\n';
+            });
+
+            if (!content) {
+                ctx.session.state = null;
+                return ctx.reply('⚠️ Nu s-a putut extrage conținut relevant din acest site.');
+            }
+
+            await ctx.reply('✨ Se generează acum descrierea adaptată prin DeepSeek...');
+
+            // Apel DeepSeek API
+            try {
+                const deepseekResponse = await axios.post(
+                    'https://api.deepseek.com/v1/chat/completions', // URL-ul API-ului DeepSeek
+                    {
+                        model: 'deepseek-chat', // Modelul DeepSeek (verifică documentația pentru opțiuni)
+                        messages: [
+                            {
+                                role: 'system',
+                                content: 'You are an assistant who writes engaging and concise website descriptions based on provided text.'
+                            },
+                            {
+                                role: 'user',
+                                content: `Generează o descriere atractivă și adaptată pentru website-ul ${text} folosind textele următoare:\n\n${content}`
+                            }
+                        ]
+                    },
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+
+                const generatedDescription = deepseekResponse.data.choices[0].message.content;
+
+                await ctx.reply(`🚀 Descriere generată pentru ${text}:\n\n${generatedDescription}`);
+
+            } catch (error) {
+                console.error('Eroare la DeepSeek API:', error);
+                await ctx.reply('❌ A apărut o eroare la generarea descrierii. Încearcă din nou.');
+            }
+
+        } catch (error) {
+            console.error('Eroare la extragerea conținutului site-ului:', error);
+            await ctx.reply('❌ A apărut o eroare la accesarea site-ului. Asigură-te că domeniul este corect și accesibil.');
+        }
+
+        ctx.session.state = null; // Resetare stare
+        return;
+    }
+    if (state === 'awaiting_domain_for_extract_data') {
+        // Validare domeniu introdus
+        if (!/^([\w-]+\.)+[\w-]{2,}$/.test(text)) {
+            return ctx.reply('⚠️ Invalid domain.');
+        }
+
+        await ctx.reply(`🔄 Extract data from .. ${text}...`);
+
+        try {
+            const response = await axios.get(`https://${text}`);
+            const $ = cheerio.load(response.data);
+
+            let content = '';
+            const seenText = new Set();
+            const relevantTags = ['p'];
+
+            relevantTags.forEach((tag) => {
+                $(tag).each((_, el) => {
+                    const textContent = $(el).text().trim();
+                    if (textContent && !seenText.has(textContent)) {
+                        seenText.add(textContent);
+                        content += textContent + '\n\n';
+                    }
+                });
+            });
+
+            if (!content) {
+                ctx.session.state = null;
+                return ctx.reply('⚠️Cant extract text form site.');
+            }
+
+            // Limitează conținutul la 4.000 de caractere (pentru a evita depășirea limitelor Telegram)
+            if (content.length > 4000) {
+                content = content.substring(0, 4000) + '...';
+            }
+
+            // Trimite conținutul extras utilizatorului
+            await ctx.reply(`📄 Conținut extras de pe ${text}:\n\n${content}`);
+
+        } catch (error) {
+            console.error('Eroare la extragerea conținutului site-ului:', error);
+            await ctx.reply('❌ A apărut o eroare la accesarea site-ului. Asigură-te că domeniul este corect și accesibil.');
+        }
+
+        ctx.session.state = null; // Resetare stare
+        return;
+    }
+
     if (state === 'awaiting_domain_location') {
         const parts = text.split('-');
         if (parts.length !== 2 || !countryCodes[parts[1].trim().toUpperCase()]) {
@@ -156,7 +350,11 @@ bot.on('text', async (ctx) => {
         ctx.session.state = null;
         return ctx.reply('🎉 Campaign script generated successfully!');
     }
+
 });
+
+
+
 
 
 
