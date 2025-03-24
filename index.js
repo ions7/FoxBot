@@ -11,6 +11,8 @@ const OpenAI = require('openai');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const archiver = require('archiver');
+const Redis = require('ioredis');
+const statsRedis = new Redis(process.env.REDIS_URL);
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -32,22 +34,47 @@ const session = new RedisSession({
 
 bot.use(session.middleware());
 
+bot.use(async (ctx, next) => {
+    if (ctx.message && ctx.message.text) {
+        const userId = ctx.from.id;
+        const command = ctx.message.text;
+
+
+        await statsRedis.hincrby(`user:${userId}:commands`, command, 1);
+
+
+        await statsRedis.hset(`user:${userId}:info`, 'username', ctx.from.username || ctx.from.first_name);
+        await statsRedis.hsetnx(`user:${userId}:info`, 'first_used', new Date().toISOString());
+    }
+    await next();
+});
+
 // Comanda start cu mesaj personalizat și tastatură explicită
 bot.start((ctx) => {
     const username = ctx.from.username || ctx.from.first_name;
 
     const welcomeMessage = ctx.session.visited
-        ? `Da spune sincer  ${username} tu LCIICTF ? 🍆`
+        ? `${username} Do you know why Google doesn’t love casinos? `
         : `Welcome to FoxFarm🦊, ${username}!`;
 
-    ctx.session.visited = true;
+
 
     bot.telegram.sendMessage(ctx.chat.id, welcomeMessage, {
+
         reply_markup: {
-            keyboard: [['📝 Create Camp', '📊 DataScript'],['📂 Extract Data','☣️ Get SourceCode'] ,['🪄 Generate assets','🪄 Deep Assets']],
+            keyboard: [['📝 Create Camp', '🤖 Auto Campaign'],['📊 DataScript'],['📂 Extract Data','☣️ Get SourceCode'] ,['🪄 Generate assets','🪄 Deep Assets']],
             resize_keyboard: true,
         },
     });
+    const joke  = 'Because every time it tried to play, it lost everything…' +
+        ' in “cookies” and got banned for “❌Circumventing Systems”! 😆🎰';
+    bot.telegram.sendMessage(ctx.chat.id,joke);
+});
+
+
+bot.hears('🤖 Auto Campaign', async (ctx) => {
+    ctx.session.state = 'awaiting_autocamp_input';
+    await ctx.reply('Send me domain GEO (ex: domaincasino.com*CA):');
 });
 bot.hears('🪄 Generate assets', async (ctx) => {
     ctx.session.state = 'awaiting_domain_for_assets';
@@ -114,6 +141,56 @@ bot.hears('☣️ Get SourceCode', (ctx) => {
     ctx.session.state = 'awaiting_domain_for_get_source_code';
     ctx.reply('🌐 Enter web site:');
 });
+function escapeMarkdown(text) {
+    return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+}
+bot.hears('/stats', async (ctx) => {
+    if (ctx.from.id !== 6742445633) {
+        return ctx.reply("❌ Nu ai acces la această comandă.");
+    }
+
+    // Obține toți utilizatorii
+    const userKeys = await statsRedis.keys('user:*:info');
+    let stats = "📊 *Statistici utilizatori:*\n\n";
+
+    for (const key of userKeys) {
+        const userId = key.split(':')[1];
+        const userInfo = await statsRedis.hgetall(key);
+        const userCommands = await statsRedis.hgetall(`user:${userId}:commands`);
+
+        stats += `👤 ${escapeMarkdown(userInfo.username || 'N/A')} (${userId}):\n`;
+        stats += `🕒 Prima utilizare: ${escapeMarkdown(userInfo.first_used || 'N/A')}\n`;
+        stats += `📌 Comenzi:\n`;
+
+        for (const [cmd, count] of Object.entries(userCommands)) {
+            stats += `- ${escapeMarkdown(cmd)}: ${count} utilizări\n`;
+        }
+        stats += "\n";
+    }
+
+    await ctx.reply(stats, { parse_mode: 'Markdown' });
+});
+
+
+const userStats = {};
+
+bot.use((ctx, next) => {
+    if (ctx.message) {
+        const userId = ctx.from.id;
+        userStats[userId] = userStats[userId] || {
+            username: ctx.from.username,
+            commands: {}
+        };
+        userStats[userId].commands[ctx.message.text] =
+            (userStats[userId].commands[ctx.message.text] || 0) + 1;
+    }
+    next();
+});
+
+// Salvează periodic pe disk (opțional)
+setInterval(() => {
+    fs.writeFileSync('userStats.json', JSON.stringify(userStats));
+}, 60000);
 
 bot.on('text', async (ctx) => {
     const state = ctx.session.state;
@@ -209,6 +286,170 @@ keyword1/keyword2/keyword3/keyword4`
 
         ctx.session.state = null; // resetare state
         return;
+    }
+    if (ctx.session.state === 'awaiting_autocamp_input') {
+        try {
+            // 1. Prelucrare input
+            const [domain, countryCode] = ctx.message.text.split('*');
+            const countryName = countryCodes[countryCode?.toUpperCase()];
+
+            if (!domain || !countryName) {
+                return ctx.reply(`⚠️ Invalid Format. Accept content: domeniu.com*RO\n\nValid country code: ${Object.keys(countryCodes).join(', ')}`);
+            }
+
+            // 2. Extrage conținut
+            await ctx.reply(`🔍 Get text  from ${domain}...`);
+            const response = await axios.get(`https://${domain}`, {
+                timeout: 10000,
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+
+            const $ = cheerio.load(response.data);
+            let content = '';
+            $('h1, h2, h3, p').each((_, el) => {
+                content += $(el).text().trim() + '\n';
+            });
+
+            if (!content || content.length < 100) {
+                throw new Error('Not enough content');
+            }
+
+            // 3. Generează elemente cu ChatGPT
+            await ctx.reply('🧠 Thinking...');
+            const gptResponse = await openai.chat.completions.create({
+                model: "gpt-4",
+                messages: [{
+                    role: "system",
+                    content: `You are a Google Ads expert.Generates strictly in this JSON format
+                {
+                    "headlines": ["Text1","Text2","Text3","Text4"],
+                    "descriptions": ["Text1","Text2"],
+                    "keywords": ["kw1","kw2","kw3","kw4","kw5"]
+                }
+               Rules:
+                        - Headlines: 4 elements, max 25 characters, Title Case
+                        - Descriptions: 2 elements, max 85 characters
+                        - Keywords: 5 5 elements, lowercase`
+                }, {
+                    role: "user",
+                    content: content.substring(0, 8000)
+                }],
+                temperature: 0.3
+            });
+
+
+            const { headlines, descriptions, keywords } = JSON.parse(gptResponse.choices[0].message.content);
+
+
+            const scriptContent = `
+function main() {
+  var campaignName = "Search-${domain.replace(/\./g, '-').slice(0, 15)}-${countryCode}";
+  var adGroupName = "AdGroup-${countryCode}-1";
+  var finalUrl = "https://${domain}";
+  var budget = ${(Math.random() * (8 - 5) + 5).toFixed(2)};
+  var location = "${countryName}";
+  var headlines = ${JSON.stringify(headlines)};
+  var descriptions = ${JSON.stringify(descriptions)};
+  var keywords = ${JSON.stringify(keywords)};
+
+  createCampaign(campaignName, adGroupName, finalUrl, budget, location, headlines, descriptions, keywords);
+}
+
+function createCampaign(campaignName, adGroupName, finalUrl, budget, location, headlines, descriptions, keywords) {
+  var columns = [
+    "Row Type", "Action", "Campaign status", "Ad group status", "Ad status", "Keyword status",
+    "Campaign", "Campaign type", "Networks", "Ad group", "Budget", "Bid strategy type", 
+    "Campaign start date", "Campaign end date", "Location", "Ad type", "Keyword", "Type", 
+    "Headline 1", "Headline 2", "Headline 3", "Headline 4", "Headline 5", "Headline 6", "Headline 7", 
+    "Description 1", "Description 2", "Description 3", "Description 4", "Description 5", "Final URL"
+  ];
+
+  var upload = AdsApp.bulkUploads().newCsvUpload(columns, {moneyInMicros: false});
+
+  upload.append({
+    "Row Type": "Campaign",
+    "Action": "Add",
+    "Campaign status": "Enabled",
+    "Campaign": campaignName,
+    "Campaign type": "Search",
+    "Networks": "Google search",
+    "Budget": budget,
+    "Bid strategy type": "Maximize clicks",
+    "Campaign start date": getFormattedDate(0), 
+    "Campaign end date": getFormattedDate(30), 
+    "Location": location
+  });
+
+  upload.append({
+    "Row Type": "Ad group",
+    "Action": "Add",
+    "Ad group status": "Enabled",
+    "Campaign": campaignName,
+    "Ad group": adGroupName
+  });
+
+  var adData = {
+    "Row Type": "Ad",
+    "Action": "Add",
+    "Ad status": "Enabled",
+    "Campaign": campaignName,
+    "Ad group": adGroupName,
+    "Ad type": "Responsive search ad",
+    "Final URL": finalUrl
+  };
+
+  for (var i = 0; i < headlines.length; i++) {
+    adData["Headline " + (i + 1)] = headlines[i];
+  }
+
+  for (var i = 0; i < descriptions.length; i++) {
+    adData["Description " + (i + 1)] = descriptions[i];
+  }
+
+  upload.append(adData);
+
+  if (Array.isArray(keywords) && keywords.length > 0) {
+    for (var i = 0; i < keywords.length; i++) {
+      upload.append({
+        "Row Type": "Keyword",
+        "Action": "Add",
+        "Keyword status": "Paused",
+        "Campaign": campaignName,
+        "Ad group": adGroupName,
+        "Keyword": keywords[i],
+        "Type": "Broad Match"
+      });
+    }
+  }
+
+  upload.apply();
+}
+
+function getFormattedDate(daysToAdd) {
+  var date = new Date();
+  date.setDate(date.getDate() + daysToAdd); 
+  return Utilities.formatDate(date, AdsApp.currentAccount().getTimeZone(), "yyyy-MM-dd");
+}
+`;
+
+            // 6. Trimite fișierul
+            const fileName = `campaign_${domain.replace(/\./g, '_')}_${countryCode}.js`;
+            fs.writeFileSync(fileName, scriptContent);
+
+            await ctx.replyWithDocument({
+                source: fileName,
+                filename: fileName
+            });
+
+            // 7. Curăță
+            fs.unlinkSync(fileName);
+            ctx.session.state = null;
+
+        } catch (error) {
+            console.error('Eroare:', error);
+            await ctx.reply(`❌ Eroare: ${error.message}\nÎncearcă din nou.`);
+            ctx.session.state = null;
+        }
     }
     if (state === 'awaiting_domain_for_deepseek_assets') {
         // Validare domeniu introdus
@@ -448,8 +689,6 @@ keyword1/keyword2/keyword3/keyword4`
         return;
     }
 
-
-
     if (state === 'awaiting_domain_location') {
         const parts = text.split('*');
         if (parts.length !== 2 || !countryCodes[parts[1].trim().toUpperCase()]) {
@@ -512,6 +751,8 @@ keyword1/keyword2/keyword3/keyword4`
         ctx.session.state = null;
         return ctx.reply('🎉 Campaign script generated successfully!');
     }
+
+
 
 });
 
