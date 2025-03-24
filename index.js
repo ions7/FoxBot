@@ -8,6 +8,9 @@ const scriptTemplate = require('./scripttemplate');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const OpenAI = require('openai');
+const puppeteer = require('puppeteer');
+const path = require('path');
+const archiver = require('archiver');
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -41,7 +44,7 @@ bot.start((ctx) => {
 
     bot.telegram.sendMessage(ctx.chat.id, welcomeMessage, {
         reply_markup: {
-            keyboard: [['📝 Create Camp', '📊 DataScript'],['📂 Extract Data'] ,['🪄 Generate assets'],['🪄 Deep Assets']],
+            keyboard: [['📝 Create Camp', '📊 DataScript'],['📂 Extract Data','☣️ Get SourceCode'] ,['🪄 Generate assets','🪄 Deep Assets']],
             resize_keyboard: true,
         },
     });
@@ -107,10 +110,15 @@ bot.hears('📝 Create Camp', (ctx) => {
     ctx.reply('Please enter domain & location(format: domain.com-CA)');
 });
 
+bot.hears('☣️ Get SourceCode', (ctx) => {
+    ctx.session.state = 'awaiting_domain_for_get_source_code';
+    ctx.reply('🌐 Enter web site:');
+});
+
 bot.on('text', async (ctx) => {
     const state = ctx.session.state;
     const text = ctx.message.text;
-    if (['📊 DataScript', '📝 Create Camp', '🪄 Generate assets', '🪄 Deep Assets','📂 Extract Data'].includes(text)) {
+    if (['📊 DataScript', '📝 Create Camp', '🪄 Generate assets','☣️ Get SourceCode', '🪄 Deep Assets','📂 Extract Data'].includes(text)) {
         return;
     }
 
@@ -287,6 +295,132 @@ bot.on('text', async (ctx) => {
         ctx.session.state = null; // Resetare stare
         return;
     }
+    if (state === 'awaiting_domain_for_get_source_code') {
+        const validator = require('validator');
+        const puppeteer = require('puppeteer');
+        const fs = require('fs');
+        const path = require('path');
+        const axios = require('axios');
+        const archiver = require('archiver');
+        const { URL } = require('url');
+
+        if (!validator.isFQDN(text)) {
+            return ctx.reply('⚠️ Domeniu invalid. Încearcă din nou (ex: domeniu.com).');
+        }
+
+        await ctx.reply(`🔄 Se obține codul sursă și resursele de pe ${text}...`);
+
+        let browser;
+        try {
+            browser = await puppeteer.launch();
+            const page = await browser.newPage();
+
+            await page.goto(`https://${text}`, { waitUntil: 'networkidle2', timeout: 30000 });
+
+            const domainName = text.replace(/[^a-zA-Z0-9]/g, '_');
+            const siteFolder = path.join(__dirname, domainName);
+            if (!fs.existsSync(siteFolder)) {
+                fs.mkdirSync(siteFolder);
+            }
+
+            async function downloadPage(currentUrl) {
+                const localPage = await browser.newPage();
+                await localPage.goto(currentUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                let htmlContent = await localPage.content();
+                const domainRegex = new RegExp(`https?://${text}`, 'g');
+                htmlContent = htmlContent.replace(domainRegex, '.');
+
+                const urlPath = new URL(currentUrl).pathname;
+                const filePath = urlPath === '/' ? 'index.html' : path.join(urlPath, 'index.html');
+                const fullFilePath = path.join(siteFolder, filePath);
+
+                if (!fs.existsSync(path.dirname(fullFilePath))) {
+                    fs.mkdirSync(path.dirname(fullFilePath), { recursive: true });
+                }
+
+                fs.writeFileSync(fullFilePath, htmlContent);
+
+                const resources = await localPage.evaluate(() => {
+                    const baseURL = window.location.origin;
+                    const resources = [];
+
+                    document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+                        resources.push({ url: new URL(link.href, baseURL).href });
+                    });
+                    document.querySelectorAll('img').forEach(img => {
+                        resources.push({ url: new URL(img.src, baseURL).href });
+                    });
+                    document.querySelectorAll('script[src]').forEach(script => {
+                        resources.push({ url: new URL(script.src, baseURL).href });
+                    });
+                    return resources;
+                });
+
+                for (const resource of resources) {
+                    try {
+                        const resourceUrl = new URL(resource.url);
+                        const resourcePathname = resourceUrl.pathname;
+                        const resourcePath = path.join(siteFolder, resourcePathname);
+
+                        if (!fs.existsSync(path.dirname(resourcePath))) {
+                            fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
+                        }
+
+                        const response = await axios.get(resource.url, { responseType: 'arraybuffer', validateStatus: null });
+
+                        if (response.status === 200) {
+                            fs.writeFileSync(resourcePath, response.data);
+                        } else {
+                            console.warn(`Resursa ${resource.url} a returnat status ${response.status}`);
+                        }
+                    } catch (error) {
+                        console.error(`Eroare la descărcarea resursei ${resource.url}:`, error);
+                    }
+                }
+
+                await localPage.close();
+            }
+
+            const headerLinks = await page.evaluate((domain) => {
+                return Array.from(document.querySelectorAll('header a[href]'))
+                    .map(a => a.href)
+                    .filter(href => href.startsWith(domain));
+            }, `https://${text}`);
+
+            const uniqueLinks = Array.from(new Set([`https://${text}`, ...headerLinks]));
+
+            for (const link of uniqueLinks) {
+                await downloadPage(link);
+            }
+
+            const zipFilePath = path.join(__dirname, `${domainName}.zip`);
+            const output = fs.createWriteStream(zipFilePath);
+            const archive = archiver('zip', { zlib: { level: 9 } });
+
+            output.on('close', async () => {
+                await ctx.replyWithDocument({ source: zipFilePath });
+                fs.rmSync(siteFolder, { recursive: true, force: true });
+                fs.unlinkSync(zipFilePath);
+            });
+
+            archive.pipe(output);
+            archive.directory(siteFolder, false);
+            archive.finalize();
+
+        } catch (error) {
+            console.error('Eroare la obținerea codului sursă și resurselor:', error);
+            await ctx.reply('❌ A apărut o eroare la accesarea site-ului. Verifică dacă domeniul este corect și accesibil.');
+        } finally {
+            if (browser) await browser.close();
+        }
+
+        ctx.session.state = null;
+        return;
+    }
+
+
 
     if (state === 'awaiting_domain_location') {
         const parts = text.split('-');
