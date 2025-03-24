@@ -37,7 +37,7 @@ bot.start((ctx) => {
     const username = ctx.from.username || ctx.from.first_name;
 
     const welcomeMessage = ctx.session.visited
-        ? `Welcome back to FoxFarm🦊, ${username}!`
+        ? `Da spune sincer  ${username} tu LCIICTF ? 🍆`
         : `Welcome to FoxFarm🦊, ${username}!`;
 
     ctx.session.visited = true;
@@ -124,9 +124,9 @@ bot.on('text', async (ctx) => {
 
     if (state === 'awaiting_domain_for_assets') {
         // Validare domeniu introdus
-        if (!/^([\w-]+\.)+[\w-]{2,}$/.test(text)) {
-            return ctx.reply('⚠️ Domeniu invalid. Încearcă din nou (ex: domeniu.com).');
-        }
+        // if (!/^([\w-]+\.)+[\w-]{2,}$/.test(text)) {
+        //     return ctx.reply('⚠️ Domeniu invalid. Încearcă din nou (ex: domeniu.com).');
+        // }
 
         await ctx.reply(`🔄 Se extrage conținutul de pe ${text}...`);
 
@@ -155,11 +155,39 @@ bot.on('text', async (ctx) => {
                     messages: [
                         {
                             role: 'system',
-                            content: 'You are an assistant who writes engaging and concise website descriptions based on provided text.'
+                            content: 'Suppose you  are a experienced copywriter who writes text for advertising campaigns for Google Ads .'
                         },
                         {
                             role: 'user',
-                            content: `Generează o descriere atractivă și adaptată pentru website-ul ${text} folosind textele următoare:\n\n${content}`
+                            content: `: Website content:
+\\n\\n${content}
+Based on the website content above, I want to run a Google Ads campaign on Search. Please provide the following in English:
+4 Headlines:
+No punctuation or special characters
+Maximum 25 characters each
+Each word should start with a capital letter
+Use the keywords provided below to help generate the headlines
+4 Descriptions:
+No punctuation
+Maximum 85 characters each
+Only the first word should start with a capital letter
+4 Unique Keywords:
+No punctuation or special characters
+All lowercase
+Should include general terms a user might search for
+Do not use words like luxury, win(and related to win, winning etc.), or anything related to casino(casino games, casino hotel, best casino etc.)
+Do not mention the country
+Formatting:
+Separate each element with a forward slash ( / ) like this:
+Headlines:
+Headline1/Headline2/Headline3/Headline4
+Descriptions:
+Description1/
+Description2/
+Description3/
+Description4
+Unique Keywords:
+keyword1/keyword2/keyword3/keyword4`
                         }
                     ]
                 });
@@ -423,9 +451,9 @@ bot.on('text', async (ctx) => {
 
 
     if (state === 'awaiting_domain_location') {
-        const parts = text.split('-');
+        const parts = text.split('*');
         if (parts.length !== 2 || !countryCodes[parts[1].trim().toUpperCase()]) {
-            return ctx.reply('⚠️ Invalid format or country code. Try again (e.g., example.com/CA).');
+            return ctx.reply('⚠️ Invalid format or country code. Try again (e.g., example.com*CA).');
         }
         ctx.session.domain = parts[0].trim();
         ctx.session.location = countryCodes[parts[1].trim().toUpperCase()];

@@ -90,7 +90,6 @@ function pauseCampaignsWithDisapprovedAds() {
         }
     }
 }
-
 function main() {
     const accountId = AdsApp.currentAccount().getCustomerId();
     const ACCOUNT_NAME = AdsApp.currentAccount().getName();
@@ -101,99 +100,94 @@ function main() {
     const { sheet, headers } = prepareAccountDataSheet(spreadsheet);
     const sheet1 = prepareSheet1(spreadsheet);
 
-    const campaignIterator = AdsApp.campaigns().withCondition("Status IN ['ENABLED', 'PAUSED']").get();
-    const rows = [];
-    const bucharestTimezone = "Europe/Bucharest";
 
+    const bucharestTimezone = "Europe/Bucharest";
     let mostRecentCampaign = null;
     let mostRecentStartDate = null;
-    let totalCampaigns = 0;
+    let rows = [];
 
-    const accountStats = AdsApp.currentAccount().getStatsFor("ALL_TIME");
-    const totalSpend = accountStats.getCost();
-
-    while (campaignIterator.hasNext()) {
-        const campaign = campaignIterator.next();
-        totalCampaigns++;
-
-        const startDateObject = campaign.getStartDate();
-        if (!startDateObject) continue;
+    const campaignSelectors = [
+        AdsApp.campaigns().withCondition("Status IN ['ENABLED', 'PAUSED']"),
+        AdsApp.videoCampaigns().withCondition("Status IN ['ENABLED', 'PAUSED']")
+    ];
 
 
-        const year = startDateObject.year;
-        const month = startDateObject.month;
-        const day = startDateObject.day;
+    const videoCampaignIterator = AdsApp.videoCampaigns().withCondition("Status IN ['ENABLED', 'PAUSED']").get();
 
-
-        const startDateString = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-
-
-
-        const startDate = new Date(startDateString);
-        if (isNaN(startDate.getTime())) continue;
-
-
-        if (!mostRecentStartDate || startDate.getTime() > mostRecentStartDate.getTime()) {
-            mostRecentCampaign = campaign;
-            mostRecentStartDate = startDate;
-        }
+    while (videoCampaignIterator.hasNext()) {
+        const videoCampaign = videoCampaignIterator.next();
+        console.log(`🎥 Found Video Campaign: ${videoCampaign.getName()}, Status: ${videoCampaign.isEnabled() ? "Enabled" : "Paused"}`);
     }
+
+    campaignSelectors.forEach(selector => {
+        const iterator = selector.get();
+        while (iterator.hasNext()) {
+            const campaign = iterator.next();
+            const startDateObject = campaign.getStartDate();
+            if (!startDateObject) continue;
+
+            const startDateString = `${startDateObject.year}-${startDateObject.month.toString().padStart(2, '0')}-${startDateObject.day.toString().padStart(2, '0')}`;
+            const startDate = new Date(startDateString);
+            if (isNaN(startDate.getTime())) continue;
+
+            if (!mostRecentStartDate || startDate.getTime() > mostRecentStartDate.getTime()) {
+                mostRecentCampaign = campaign;
+                mostRecentStartDate = startDate;
+            }
+        }
+    });
+
 
 
     if (mostRecentCampaign) {
-        const campaign = mostRecentCampaign;
-        let campaignStatus = "Unknown";
+        let campaignStatus = mostRecentCampaign.isEnabled() ? "Enabled" : "Paused";
+        let campaignType = mostRecentCampaign.getAdvertisingChannelType();
 
-        if (campaign.isEnabled()) {
-            campaignStatus = "Enabled";
-        } else if (campaign.isPaused()) {
-            campaignStatus = "Paused";
-        } else if (campaign.isRemoved()) {
-            campaignStatus = "Removed";
-        }
+        const stats = mostRecentCampaign.getStatsFor("ALL_TIME");
+        let clicks = stats.getClicks();
+        let impressions = stats.getImpressions();
+        let spend = stats.getCost();
 
-        const adIterator = campaign.ads().get();
         let adsDisapproved = false;
         let disapprovalReasons = [];
         let policyLimited = "No";
         let policyReasons = [];
 
+
+        let adIterator;
+        if (campaignType === "VIDEO") {
+            adIterator = mostRecentCampaign.videoAds().get();
+        } else {
+            adIterator = mostRecentCampaign.ads().get();
+        }
+
         while (adIterator.hasNext()) {
             const ad = adIterator.next();
-            const approvalStatus = ad.getPolicyApprovalStatus();
-
-            if (approvalStatus === 'DISAPPROVED') {
+            if (ad.getPolicyApprovalStatus() === 'DISAPPROVED') {
                 adsDisapproved = true;
-                const policyTopics = ad.getPolicyTopics();
-                if (policyTopics.length > 0) {
-                    policyTopics.forEach(function (topic) {
-                        disapprovalReasons.push(topic.getName());
-                    });
-                }
+                ad.getPolicyTopics().forEach(topic => {
+                    disapprovalReasons.push(topic.getName());
+                });
             }
-
-            const policyTopics = ad.getPolicyTopics();
-            if (policyTopics.length > 0) {
+            if (ad.getPolicyApprovalStatus().includes('LIMITED')) {
                 policyLimited = "Yes";
-                policyTopics.forEach(function (topic) {
+                ad.getPolicyTopics().forEach(topic => {
                     policyReasons.push(topic.getId());
                 });
             }
         }
-
-        const stats = campaign.getStatsFor("ALL_TIME");
         const currentDate = new Date();
         const lastInsertDateTime = "->" + Utilities.formatDate(currentDate, bucharestTimezone, "HH:mm:ss dd-MM-yyyy");
 
         rows.push([
             ACCOUNT_NAME,
             accountId,
-            campaign.getName(),
+            mostRecentCampaign.getName(),
             campaignStatus,
-            campaign.getAdvertisingChannelType(),
-            stats.getClicks(),
-            stats.getImpressions(),
-            totalSpend,
+            campaignType,
+            clicks,
+            impressions,
+            spend,
             adsDisapproved ? "Yes" : "No",
             disapprovalReasons.join(", ") || "-",
             policyLimited,
@@ -217,9 +211,11 @@ function main() {
         sheet1.getRange("A1").setValue(base64Data);
 
         sendDataToTargetSpreadsheet(targetSpreadsheetId, targetSheetName);
+
     }
 
-  pauseCampaignsWithDisapprovedAds();
+    pauseCampaignsWithDisapprovedAds();
+
 }
 
 function sendDataToTargetSpreadsheet(targetSpreadsheetId, targetSheetName) {
