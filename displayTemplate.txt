@@ -1,0 +1,132 @@
+
+function main() {
+
+    var campaignName = "Search-${domain.replace(/\./g, '-').slice(0, 15)}-${countryCode}";
+    var adGroupName = "AdGroup-${countryCode}-1";
+    var finalUrl = "https://${domain}";
+    var budget = ${(Math.random() * (8 - 5) + 5).toFixed(2)};
+    var location = "${countryName}";
+    var headlines = ${JSON.stringify(headlines)};
+    var descriptions = ${JSON.stringify(descriptions)};
+    var businessName = "My${domain.replace(/\./g, '-').slice(0, 5)}-${countryCode}";
+    var longHeadline = "Get Ahead in Fantasy Leagues with Our Expert Tools";
+    var imageId=  "https://images.unsplash.com/photo-1575361204480-aadea25e6e68?w=1200&h=628&auto=format&fit=crop";
+    var  squareImageId = "https://images.unsplash.com/photo-1511426463457-0571e247d816?w=1200&h=1200&auto=format&fit=crop";
+    var logoImageId =  "https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?w=1200&h=1200&auto=format&fit=crop";
+
+    createDisplyCampaign(campaignName, adGroupName, finalUrl, budget, location,businessName, longHeadline,headlines, descriptions,imageId,squareImageId,logoImageId);
+
+}
+function createDisplyCampaign(campaignName, adGroupName, finalUrl, budget, location,businessName, longHeadline,headlines, descriptions,imageId,squareImageId,logoImageId) {
+
+    var upload = AdsApp.bulkUploads().newCsvUpload(
+        ["Row Type", "Action","Campaign status", "Ad status", "Campaign", "Campaign type","Networks",
+            "Bid strategy type","Campaign start date","Campaign end date","Budget","Location","Ad group","Ad group status", "Ad type",
+            "Long headline", "Headline", "Headline 2", "Headline 3", "Headline 4", "Headline 5",
+            "Description", "Description 2", "Final URL", "Image ID", "Square image ID", "Logo image",
+            "Business name"], {moneyInMicros: false});
+
+
+    upload.append({
+        "Row Type": "Campaign",
+        "Action": "Add",
+        "Campaign status": "Enabled",
+        "Campaign": campaignName,
+        "Campaign type": "Display",
+        "Networks": "Google Display Network",
+        "Budget": budget,
+        "Bid strategy type": "Maximize conversions",
+        "Campaign start date": getFormattedDate(0),
+        "Campaign end date": getFormattedDate(30),
+        "Location": location
+    });
+
+    upload.append({
+        "Row Type": "Ad group",
+        "Action": "Add",
+        "Ad group status": "Enabled",
+        "Campaign": campaignName,
+        "Ad group": adGroupName
+    });
+
+
+
+function main() {
+  var campaignName = "{{campaignName}}";
+  var adGroupName = "{{adGroupName}}";
+  var finalUrl = "{{finalUrl}}";
+  var budget = {{budget}};
+  var location = "{{location}}";
+  var headlines = {{headlines}};
+  var descriptions = {{descriptions}};
+  var keywords = {{keywords}};
+
+  createCampaign(campaignName, adGroupName, finalUrl, budget, location, headlines, descriptions, keywords);
+}
+
+function createCampaign(campaignName, adGroupName, finalUrl, budget, location, headlines, descriptions, keywords) {
+  var columns = [
+    "Row Type", "Action", "Campaign status", "Ad group status", "Ad status", "Keyword status",
+    "Campaign", "Campaign type", "Networks", "Ad group", "Budget", "Bid strategy type",
+    "Campaign start date", "Campaign end date", "Location", "Ad type", "Keyword", "Type",
+    "Headline 1", "Headline 2", "Headline 3", "Headline 4", "Headline 5", "Headline 6", "Headline 7",
+    "Description 1", "Description 2", "Description 3", "Description 4", "Description 5", "Final URL"
+  ];
+
+  var upload = AdsApp.bulkUploads().newCsvUpload(columns, {moneyInMicros: false});
+
+  upload.append({
+    "Row Type": "Campaign",
+    "Action": "Add",
+    "Campaign status": "Enabled",
+    "Campaign": campaignName,
+    "Campaign type": "Search",
+    "Networks": "Google search",
+    "Budget": budget,
+    "Bid strategy type": "Maximize clicks",
+    "Campaign start date": getFormattedDate(0),
+    "Campaign end date": getFormattedDate(30),
+    "Location": location
+  });
+
+  upload.append({
+    "Row Type": "Ad group",
+    "Action": "Add",
+    "Ad group status": "Enabled",
+    "Campaign": campaignName,
+    "Ad group": adGroupName
+  });
+
+
+
+    var adData = {
+        "Row Type": "Ad",
+        "Action": "Add",
+        "Ad status": "Enabled",
+        "Campaign": campaignName,
+        "Ad group": adGroupName,
+        "Ad type": "Responsive display ad",
+        "Image ID": imageId,  // Landscape Image
+        "Square image ID": squareImageId,  // Square Image
+        "Logo image": logoImageId,
+        "Business name": businessName,
+        "Final URL": finalUrl
+    };
+
+    for (var i = 0; i < headlines.length; i++) {
+        adData["Headline " + (i + 1)] = headlines[i];
+      }
+
+      for (var i = 0; i < descriptions.length; i++) {
+        adData["Description " + (i + 1)] = descriptions[i];
+      }
+
+        upload.append(adData);
+
+    upload.apply();
+}
+function getFormattedDate(daysToAdd) {
+    var date = new Date();
+    date.setDate(date.getDate() + daysToAdd);
+    return Utilities.formatDate(date, AdsApp.currentAccount().getTimeZone(), "yyyy-MM-dd");
+}

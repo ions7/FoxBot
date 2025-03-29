@@ -71,7 +71,7 @@ function createCampaign(campaignName, adGroupName, finalUrl, budget, location, h
       upload.append({
         "Row Type": "Keyword",
         "Action": "Add",
-        "Keyword status": "Paused",
+        "Keyword status": "Enabled",
         "Campaign": campaignName,
         "Ad group": adGroupName,
         "Keyword": keywords[i],
