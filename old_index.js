@@ -4,7 +4,7 @@ const { Telegraf } = require('telegraf');
 const RedisSession = require('telegraf-session-redis');
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const fs = require('fs');
-const scriptTemplate = require('./scripttemplate');
+const scriptTemplate = require('./testScripts/scriptTemplate');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const OpenAI = require('openai');
@@ -119,7 +119,7 @@ bot.hears('📊 DataScript', async (ctx) => {
 // Handler pentru trimiterea fișierului corespunzător scriptului ales
 bot.action(/script_(.+)/, async (ctx) => {
     const scriptName = ctx.match[1];
-    const filePath = `./${scriptName}.txt`;
+    const filePath = `./trackers/${scriptName}.txt`;
 
     try {
         // Șterge mesajul anterior (cel cu variantele)
@@ -150,21 +150,21 @@ bot.hears('☣️ Get SourceCode', (ctx) => {
 function escapeMarkdown(text) {
     return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
 }
- bot.hears('/stats', async (ctx) => {
-     if (ctx.from.id !== 6742445633) {
+bot.hears('/stats', async (ctx) => {
+    if (ctx.from.id !== 6742445633) {
         return ctx.reply("❌ Nu ai acces la această comandă.");
     }
 
-     // Obține toți utilizatorii
+    // Obține toți utilizatorii
     const userKeys = await statsRedis.keys('user:*:info');
-     let stats = "📊 *Statistici utilizatori:*\n\n";
+    let stats = "📊 *Statistici utilizatori:*\n\n";
 
-     for (const key of userKeys) {
-         const userId = key.split(':')[1];
+    for (const key of userKeys) {
+        const userId = key.split(':')[1];
         const userInfo = await statsRedis.hgetall(key);
 //
         stats += `👤 ${escapeMarkdown(userInfo.username || 'N/A')} (${userId}):\n`;
-         stats += "\n";
+        stats += "\n";
     }
 //
     await ctx.reply(stats, { parse_mode: 'Markdown' });
@@ -947,8 +947,6 @@ function getFormattedDate(daysToAdd) {
     }
 
 });
-
-
 
 
 

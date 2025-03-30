@@ -1,7 +1,7 @@
 {
   "name": "fox_bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "old_index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
