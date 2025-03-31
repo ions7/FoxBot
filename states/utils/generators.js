@@ -1,5 +1,5 @@
-const { filterAdContent } = require('/states/utils/filters');
-const { getFormattedDate } = require('/states/utils/helpers');
+const { filterAdContent } = require('/filters');
+const { getFormattedDate } = require('/helpers');
 
 /**
  * Generează script pentru Search Campaign

@@ -6,13 +6,13 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 // Încărcare handler-e din fișiere separate
 const generateText_Assets = require('./states/generate_text_assets');
 const setupAutoSearchCamp = require('./states/searchCamp');
-const setupDisplayCamp  = require('states/displayCamp');
-const getTextFromSite = require('/states/getTextfromSite');
-const getSourceCode = require('/states/getSourceCode');
+const setupDisplayCamp  = require('./states/displayCamp');
+const getTextFromSite = require('./states/getTextfromSite');
+const getSourceCode = require('./states/getSourceCode');
 const getTrackerCode = require('./states/tracker');
-const searchCampStep = require('/states/searchCampStep')
+const searchCampStep = require('./states/searchCampStep')
 // Configurare middleware și sesiune
-const { sessionMiddleware, statsMiddleware } = require('states/utils/redis');
+const { sessionMiddleware, statsMiddleware } = require('./states/utils/redis');
 bot.use(sessionMiddleware);
 bot.use(statsMiddleware);
 
