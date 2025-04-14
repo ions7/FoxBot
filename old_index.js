@@ -67,16 +67,12 @@ async function fetchSingleImage(keyword, width, height) {
     return `${baseUrl}?w=${width}&h=${height}&auto=format&fit=crop`;
 }
 
-const url = require('url');
-const redisURL = url.parse(process.env.REDIS_URL);
 
+const redisClient = new Redis(process.env.REDIS_URL, {
+    tls: {} // necesar pentru rediss:// (Upstash)
+});
 const session = new RedisSession({
-    store: {
-        host: redisURL.hostname,
-        port: redisURL.port,
-        password: redisURL.auth.split(":")[1],
-        tls: {} // activează SSL pentru rediss://
-    }
+    client: redisClient
 });
 
 bot.use(session.middleware());
