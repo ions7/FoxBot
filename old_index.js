@@ -1,18 +1,16 @@
 
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
-const RedisSession = require('telegraf-session-redis');
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const fs = require('fs');
 const scriptTemplate = require('./testScripts/scriptTemplate');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const OpenAI = require('openai');
-const puppeteer = require('puppeteer');
-const path = require('path');
-const archiver = require('archiver');
 const Redis = require('ioredis');
 const UNSPLASH_ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY;
+const RedisSession = require('telegraf-session-redis');
+
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -44,14 +42,19 @@ const countryCodes = {
 //      store: { url: process.env.REDIS_URL }
 //  });
 
-const redis = new Redis(process.env.REDIS_URL, {
-    tls: {} // activează conexiune securizată (rediss)
-});
-
 const statsRedis = new Redis(process.env.REDIS_URL, {
     tls: {}
 });
 
+// RedisSession pentru sesiuni utilizatori (prin telegraf-session-redis)
+const session = new RedisSession({
+    store: {
+        url: process.env.REDIS_URL,
+        tls: {}
+    }
+});
+
+bot.use(session.middleware());
 
 async function fetchSingleImage(keyword, width, height) {
     const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(keyword)}&per_page=1&client_id=${UNSPLASH_ACCESS_KEY}`;
@@ -68,14 +71,7 @@ async function fetchSingleImage(keyword, width, height) {
 }
 
 
-const redisClient = new Redis(process.env.REDIS_URL, {
-    tls: {} // necesar pentru rediss:// (Upstash)
-});
-const session = new RedisSession({
-    client: redisClient
-});
 
-bot.use(session.middleware());
 
 
 bot.use(async (ctx, next) => {
