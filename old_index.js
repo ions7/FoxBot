@@ -1,5 +1,6 @@
 
 require('dotenv').config();
+console.log('🔍 REDIS_URL:', process.env.REDIS_URL);
 const { Telegraf } = require('telegraf');
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const fs = require('fs');
@@ -9,7 +10,6 @@ const cheerio = require('cheerio');
 const OpenAI = require('openai');
 const Redis = require('ioredis');
 const UNSPLASH_ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY;
-const RedisSession = require('telegraf-session-redis');
 const session = require('telegraf/session');
 
 
