@@ -13,7 +13,6 @@ const path = require('path');
 const archiver = require('archiver');
 const Redis = require('ioredis');
 const UNSPLASH_ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY;
-const statsRedis = new Redis(process.env.REDIS_URL);
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -41,9 +40,17 @@ const countryCodes = {
 //     return `https://images.unsplash.com/photo-${photo.id}?w=${width}&h=${height}&auto=format&fit=crop`;
 // }
 //
-const session = new RedisSession({
-     store: { url: process.env.REDIS_URL }
- });
+// const session = new RedisSession({
+//      store: { url: process.env.REDIS_URL }
+//  });
+
+const redis = new Redis(process.env.REDIS_URL, {
+    tls: {} // activează conexiune securizată (rediss)
+});
+
+const statsRedis = new Redis(process.env.REDIS_URL, {
+    tls: {}
+});
 
 
 async function fetchSingleImage(keyword, width, height) {
@@ -60,8 +67,20 @@ async function fetchSingleImage(keyword, width, height) {
     return `${baseUrl}?w=${width}&h=${height}&auto=format&fit=crop`;
 }
 
+const url = require('url');
+const redisURL = url.parse(process.env.REDIS_URL);
+
+const session = new RedisSession({
+    store: {
+        host: redisURL.hostname,
+        port: redisURL.port,
+        password: redisURL.auth.split(":")[1],
+        tls: {} // activează SSL pentru rediss://
+    }
+});
 
 bot.use(session.middleware());
+
 
 bot.use(async (ctx, next) => {
     if (ctx.message && ctx.message.text) {
