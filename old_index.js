@@ -1,6 +1,4 @@
-
 require('dotenv').config();
-console.log('🔍 REDIS_URL:', process.env.REDIS_URL);
 const { Telegraf } = require('telegraf');
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const fs = require('fs');
@@ -27,24 +25,6 @@ const countryCodes = {
     DE: "Germany", NL: "Netherlands", IRL: "Ireland", ES: "Spain", PT: "Portugal", IN: "India",PL:"Poland"
 };
 
-
-
-
-// async function fetchSingleImage(keyword, width, height) {
-//     const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(keyword)}&per_page=1&client_id=${UNSPLASH_ACCESS_KEY}`;
-//     const response = await axios.get(url);
-//     const photo = response.data.results[0];
-//
-//     if (!photo) throw new Error(`No image found for keyword: ${keyword}`);
-//
-//     return `https://images.unsplash.com/photo-${photo.id}?w=${width}&h=${height}&auto=format&fit=crop`;
-// }
-//
-// const session = new RedisSession({
-//      store: { url: process.env.REDIS_URL }
-//  });
-
-// Conectăm la Redis Upstash cu TLS
 const redis = new Redis(process.env.REDIS_URL, {
     tls: {}
 });
@@ -118,7 +98,7 @@ bot.start((ctx) => {
     bot.telegram.sendMessage(ctx.chat.id, welcomeMessage, {
 
         reply_markup: {
-            keyboard: [['🤖 Display Camp', '🤖 Auto Campaign'],['📝 Create Camp','📊 DataScript'],['📂 Extract Data','☣️ Get SourceCode'] ,['🪄 Generate assets','🪄 Deep Assets']],
+            keyboard: [['🧭 Display Camp', '🔍 Search Camp'],['🎞️Video Camp','📊 DataScript']],
             resize_keyboard: true,
         },
     });
@@ -128,25 +108,25 @@ bot.start((ctx) => {
 });
 
 
-bot.hears('🤖 Auto Campaign', async (ctx) => {
+bot.hears('🔍 Search Camp', async (ctx) => {
     ctx.session.state = 'awaiting_autocampSearch_input';
     await ctx.reply('Send me domain GEO (ex: domaincasino.com*CA):');
 });
 
 
-bot.hears('🪄 Generate assets', async (ctx) => {
-    ctx.session.state = 'awaiting_domain_for_assets';
-    await ctx.reply('Please enter your web site:');
-});
+ bot.hears('🪄 Generate assets', async (ctx) => {
+     ctx.session.state = 'awaiting_domain_for_assets';
+     await ctx.reply('Please enter your web site:');
+ });
 
-bot.hears('🪄 Deep Assets', async (ctx) => {
-    ctx.session.state = 'awaiting_domain_for_deepseek_assets';
-    await ctx.reply('Please enter your web site:');
-});
-bot.hears('📂 Extract Data', async (ctx) => {
-    ctx.session.state = 'awaiting_domain_for_extract_data';
-    await ctx.reply('🌐 Enter web site: ');
-});
+ bot.hears('🪄 Deep Assets', async (ctx) => {
+     ctx.session.state = 'awaiting_domain_for_deepseek_assets';
+     await ctx.reply('Please enter your web site:');
+ });
+ bot.hears('📂 Extract Data', async (ctx) => {
+     ctx.session.state = 'awaiting_domain_for_extract_data';
+     await ctx.reply('🌐 Enter web site: ');
+ });
 bot.hears('📊 DataScript', async (ctx) => {
     ctx.session.state = null; // Reset state pentru a nu interfera cu alt handler
     try {
@@ -190,15 +170,15 @@ bot.action(/script_(.+)/, async (ctx) => {
 });
 
 
-bot.hears('🤖 Display Camp', async (ctx) => {
+bot.hears('🧭 Display Camp', async (ctx) => {
     ctx.session.state = 'awaiting_display_andAssets_input';
     await ctx.reply('Send me domain GEO (ex: domaincasino.com*CA):');
 });
 
-bot.hears('📝 Create Camp', (ctx) => {
-    ctx.session.state = 'awaiting_domain_location';
-    ctx.reply('Please enter domain & location(format: domain.com-CA)');
-});
+ bot.hears('📝 Create Camp', (ctx) => {
+     ctx.session.state = 'awaiting_domain_location';
+     ctx.reply('Please enter domain & location(format: domain.com-CA)');
+ });
 
 bot.hears('☣️ Get SourceCode', (ctx) => {
     ctx.session.state = 'awaiting_domain_for_get_source_code';
@@ -207,7 +187,7 @@ bot.hears('☣️ Get SourceCode', (ctx) => {
 function escapeMarkdown(text) {
     return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
 }
-bot.hears('/stats', async (ctx) => {
+bot.hears('/users', async (ctx) => {
     if (ctx.from.id !== 6742445633) {
         return ctx.reply("❌ Nu ai acces la această comandă.");
     }
@@ -261,7 +241,7 @@ function filterAdContent(headlines, descriptions) {
 bot.on('text', async (ctx) => {
     const state = ctx.session.state;
     const text = ctx.message.text;
-    if (['📊 DataScript', '📝 Create Camp','🤖 Display Camp','🤖 Auto Campaign', '🪄 Generate assets','☣️ Get SourceCode', '🪄 Deep Assets','📂 Extract Data'].includes(text)) {
+    if (['📊 DataScript', '🧭 Display Camp','🔍 Search Camp', '🪄 Generate assets','☣️ Get SourceCode', '🪄 Deep Assets','📂 Extract Data'].includes(text)) {
         return;
     }
 
@@ -635,6 +615,7 @@ Generate content strictly following this JSON structure:
             var adGroupName = "AdGroup-${countryCode}-1";
             var finalUrl = "https://${domain}";
             var budget = ${(Math.random() * (8 - 5) + 5).toFixed(2)};
+            var manual_CPC = 0.07;
             var location = "${countryName}";
             var headlines = ${JSON.stringify(filteredHeadlines)};
             var descriptions = ${JSON.stringify(filteredDescriptions)};
@@ -644,13 +625,13 @@ Generate content strictly following this JSON structure:
             var squareImageId = "${squareImageId}";
             var logoImageId = "${logoImageId}";
 
-            createDisplayCampaign(campaignName, adGroupName, finalUrl, budget, location, businessName, longHeadline, headlines, descriptions, imageId, squareImageId, logoImageId);
+            createDisplayCampaign(campaignName, adGroupName, finalUrl, budget,manual_CPC, location, businessName, longHeadline, headlines, descriptions, imageId, squareImageId, logoImageId);
         }
-function createDisplayCampaign(campaignName, adGroupName, finalUrl, budget, location,businessName, longHeadline,headlines, descriptions,imageId,squareImageId,logoImageId) {
+function createDisplayCampaign(campaignName, adGroupName, finalUrl, budget,manual_CPC, location,businessName, longHeadline,headlines, descriptions,imageId,squareImageId,logoImageId) {
 
     var upload = AdsApp.bulkUploads().newCsvUpload(
         ["Row Type", "Action","Campaign status", "Ad status", "Campaign", "Campaign type","Networks",
-            "Bid strategy type","Campaign start date","Campaign end date","Budget","Location","Ad group","Ad group status", "Ad type",
+            "Bid strategy type","Campaign start date","Campaign end date","Budget","Location","Ad group","Ad group status","Default max. CPC", "Ad type",
             "Long headline", "Headline", "Headline 2", "Headline 3", "Headline 4", "Headline 5",
             "Description", "Description 2", "Final URL", "Image ID", "Square image ID", "Logo image",
             "Business name"], {moneyInMicros: false});
@@ -664,7 +645,7 @@ function createDisplayCampaign(campaignName, adGroupName, finalUrl, budget, loca
         "Campaign type": "Display",
         "Networks": "Google Display Network",
         "Budget": budget,
-        "Bid strategy type": "Maximize conversions",
+        "Bid strategy type": "Manual CPC",
         "Campaign start date": getFormattedDate(0),
         "Campaign end date": getFormattedDate(30),
         "Location": location
@@ -675,7 +656,8 @@ function createDisplayCampaign(campaignName, adGroupName, finalUrl, budget, loca
         "Action": "Add",
         "Ad group status": "Enabled",
         "Campaign": campaignName,
-        "Ad group": adGroupName
+        "Ad group": adGroupName,
+        "Default max. CPC" : manual_CPC
     });
 
      var adData = {
