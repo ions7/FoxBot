@@ -135,7 +135,7 @@ bot.hears('📊 DataScript', async (ctx) => {
                 inline_keyboard: [
                     [{ text: '🎭 CDS', callback_data: 'script_CDS' }],
                     [{ text: '🎲 ONP', callback_data: 'script_ONP' }],
-                    [{ text: '🎰 OTY', callback_data: 'script_OTY' }],
+                    [{ text: '🎰 ALQ', callback_data: 'script_ALQ' }],
                     [{ text: '👽 Yojoy', callback_data: 'script_Yojoy' }],
                     [{ text: '🛞 Nova', callback_data: 'script_Nova' }],
                     [{ text: '🥷 Zmatic', callback_data: 'script_Zmatic' }],
